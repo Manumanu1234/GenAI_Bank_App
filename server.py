@@ -20,7 +20,7 @@ from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_together import ChatTogether
 from pydantic import Field,BaseModel
-api_key="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"
+api_key=""
 mainllm = ChatGroq(
     api_key=api_key,
     model="gemma2-9b-it",
