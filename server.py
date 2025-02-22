@@ -20,7 +20,7 @@ from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_together import ChatTogether
 from pydantic import Field,BaseModel
-api_key="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"
+api_key=""
 mainllm = ChatGroq(
     api_key=api_key,
     model="gemma2-9b-it",
@@ -444,7 +444,7 @@ class Formating(BaseModel):
     final_result:str=Field(...,description="Final Result is sucess or fail")
 from langchain.prompts import PromptTemplate
 def final_making(result):
-    api_key="9ff4442add386aaadcc7bf2df155391a268d690b1c0cf4b28992a86483bfa396"
+    api_key=""
     chat = ChatTogether(
         api_key=api_key,
         model="google/gemma-2-27b-it",
@@ -470,6 +470,55 @@ def final_making(result):
         "final_result":result.final_result
     }
     return new_details
+
+import psycopg2
+from datetime import date  
+
+def insert_transaction(sen_name, rec_name, amount):
+    try:
+     
+        connection = psycopg2.connect(
+            dbname="userdetails",
+            user="postgres",
+            password="manu",
+            host="localhost",
+            port=5432
+        )
+        cursor = connection.cursor()
+        
+
+        transaction_date = date.today()
+
+
+        insert_query = """
+        INSERT INTO transaction (sen_name, rec_name, amount, date) 
+        VALUES (%s, %s, %s, %s)
+        """
+        
+ 
+        cursor.execute(insert_query, (sen_name, rec_name, amount, transaction_date))
+        
+
+        connection.commit()
+        
+        return {'message': "Transaction inserted successfully"}
+    
+    except psycopg2.Error as e:
+        return {'message': f"Database error: {e}"}
+    
+    except Exception as e:
+        return {'message': f"An unexpected error occurred: {e}"}
+    
+    finally:
+
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'connection' in locals() and connection:
+            connection.close()
+
+
+
+
 @app.post("/confirm")
 async def confirm(data: Values):
     global thread
@@ -481,7 +530,7 @@ async def confirm(data: Values):
             intrrupted_name=graph.get_state(config=thread).tasks[0].name
             if intrrupted_name == "user__confirmation":
                 print("entering---------")
-                return {"message": result["persondetails"]}
+                return {"message": result["persondetails"],"intrrupted_name":intrrupted_name}
             elif intrrupted_name == "needmobile":
                 return {"message": "No Contact in this provided name Can you describe with the person Name","intrrupted_name":intrrupted_name}
             elif intrrupted_name == "amount_detail":
@@ -492,12 +541,92 @@ async def confirm(data: Values):
         final_=final_making(result)
         final_["receiver_details"] = result.get("persondetails", "Unknown receiver")
         final_["sender_details"] = [7, "Grace Lee", "159 Willow Way, GA", 8444556677, "TD Bank", 23915]
-
+        
         if not final_.get("receiver_details") or final_.get("final_result") == "None":
             return {"message":"No Contact Found in the given number and Given name please make sure That the person is in your contact list","intrrupted_name":"final_result_failed"}
+        result = insert_transaction('Grace Lee', final_['receiver_details'][1], final_.get("amount"))
         return{"message":final_,"intrrupted_name":"final_result"}
     else:
         return {"message": f"Graph or thread not initialized. Graph: {graph}, Thread: {thread}"}
 
+
+
+def fetch_balances():
+    try:
+        connection = psycopg2.connect(
+            dbname="bankapp",
+            user="postgres",
+            password="manu",
+            host="localhost",
+            port=5432
+        )
+        cursor = connection.cursor()
+        fetch_balance_query = "SELECT * FROM users WHERE name = %s"
+
+        cursor.execute(fetch_balance_query, ('Grace Lee',))
+        sender_details = cursor.fetchone()
+
+        if sender_details is None:
+            return {'messages': "User 'Grace Lee' not found"}
+
+        return {'details':sender_details }
+    
+    except Exception as e:
+        return {'messages': f"An error occurred while fetching details: {e}"}
+    
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
+def fetch_balances1():
+    try:
+        connection = psycopg2.connect(
+            dbname="userdetails",
+            user="postgres",
+            password="manu",
+            host="localhost",
+            port=5432
+        )
+        cursor = connection.cursor()
+        fetch_balance_query = "SELECT * FROM transaction WHERE sen_name = %s"
+
+        cursor.execute(fetch_balance_query, ('Grace Lee',))
+        sender_details =cursor.fetchall()
+
+        if sender_details is None:
+            return {'messages': "User 'Grace Lee' not found"}
+
+        return {'details':sender_details }
+    
+    except Exception as e:
+        return {'messages': f"An error occurred while fetching details: {e}"}
+    
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
+
+@app.get("/userdetails")
+def UserInfo():
+    result = fetch_balances()
+    return result  
+
+@app.get("/transactions")
+def UserTransaction():
+    result=fetch_balances1()
+    new_list=[]
+    for i,datas in enumerate(result['details']):
+        details={
+            "id":i+1,
+            "description":datas[1],
+            "amount":datas[2],
+            "date":datas[3]
+        }
+        new_list.append(details)    
+    return {"details":new_list}
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
